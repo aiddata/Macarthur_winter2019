@@ -42,16 +42,18 @@ maclines$id[is.na(maclines$project_id)]
 maclines_adm01 <- maclines[grep("KHM_ADM", maclines$GeoJSON.Link.or.Feature.ID),]
 table(maclines_adm01$project_id)
 
-#identify projects in maclines that are ODA-like flow-class
-maclines_ODA<-maclines[grep("ODA-like",maclines$flow_class),]
-table(maclines_ODA$project_id)
-
 #subset maclines to non-ADM0 and non-ADM1
 maclines_prec<- maclines[-grep("KHM_ADM", maclines$GeoJSON.Link.or.Feature.ID),]
 # identify projects in maclines_prec where dates are missing
 maclines_prec$project_id[is.na(maclines$start_actual)]
 sum(is.na(maclines_prec$end_actual))
 
+#identify projects in mac_prec that are ODA-like flow-class
+macprec_ODA<-maclines_prec[grep("ODA-like",maclines_prec$flow_class),]
+table(macprec_ODA$project_id)
+table(mac_spdf$project_id)
+
+#missing end dates
 
 
 
