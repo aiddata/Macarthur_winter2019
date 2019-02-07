@@ -8,7 +8,7 @@ setwd("/Users/rbtrichler/Box Sync")
 ## Read in New Cambodia Lines Dataset (from Miranda)
 
 # Read in Cambodia lines geo-referenced
-maclines <- "MacArthur_Winter2019/MacCambodia_lines.geojson"
+maclines <- "MacArthur_Winter2019/geocodeddata_dec2018/inputdata/MacCambodia_lines.geojson"
 maclines <- st_read(maclines)
 
 # Convert to dataframe
@@ -54,6 +54,15 @@ table(macprec_ODA$project_id)
 table(mac_spdf$project_id)
 
 #missing end dates
+maclines_prec$end_planned[is.na(maclines_prec$end_actual)]
+maclines_prec$id[is.na(maclines_prec$end_planned)]
+
+maclines_prec$project_id[is.na(maclines_prec$start_planned)]
+maclines_prec$start_actual[is.na(maclines_prec$end_actual)]
+maclines_prec$start_actual[is.na(maclines_prec$end_actual)]
+
+
+write.csv(maclines,"MacArthur_Winter2019/geocodeddata_dec2018/MacCambodia_lines.csv")
 
 
 
