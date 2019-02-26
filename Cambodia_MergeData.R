@@ -12,6 +12,7 @@ library(sf)
 ## Set working directory
 setwd("/Users/rbtrichler/Box Sync/Macarthur_winter2019")
 
+# setwd("~/Box Sync/Macarthur_winter2019")
 
 ##---------
 ## Read in Cell Level Data
@@ -42,12 +43,12 @@ colnames(ntl)<-gsub("v4composites_calibrated_201709.","ntl_",colnames(ntl))
 colnames(ntl)<-gsub(".mean","",colnames(ntl))
 # create time range trends for 2009-2013 to impute 2014 ntl data
 # first create ntl panel dataset and then can do time range trends 
-ntl_order<-ntl[,order(names(ntl))]
-ntl_0913<-ntl_order[,c(1,19:23)]
-ntl<-grep("ntl",names(ntl_0913))
 
-ntl_reshape <- c(ntl)
-ntl_0913panel <- reshape(ntl_0913, varying=ntl_reshape, direction="long",idvar="ID",sep="_",timevar="year")
+ntl_0913 <- ntl[,grepl(paste(c("ID", 2009:2013), collapse = "|"), names(ntl))]
+ntl_cols<-grep("ntl",names(ntl_0913))
+
+ntl_reshape <- c(ntl_cols)
+ntl_0913panel <- reshape(ntl_0913, varying=ntl_cols, direction="long",idvar="ID",sep="_",timevar="year")
 
 #create 2009-2013 trend, then will use to impute 2014 value
 
@@ -67,9 +68,10 @@ ntl_0913panel <- reshape(ntl_0913, varying=ntl_reshape, direction="long",idvar="
 
 #
 
+# merge the main extract with NTL, removing all non-Cambodia NTL observations
+geo <- merge(camb_cells, ntl, by="ID", all.x=T)
 
 
-camb_cells<-merge
 
 
 
