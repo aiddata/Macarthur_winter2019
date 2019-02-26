@@ -5,7 +5,7 @@
 # Outcome: Forest Loss using 30m Hansen cells aggregated to 5km LTDR, cumulative share of Hansen cells experiencing forest loss
 #######################
 
-library(sf)
+library(sf); library(rgdal)
 
 
 
@@ -71,6 +71,15 @@ ntl_0913panel <- reshape(ntl_0913, varying=ntl_cols, direction="long",idvar="ID"
 # merge the main extract with NTL, removing all non-Cambodia NTL observations
 geo <- merge(camb_cells, ntl, by="ID", all.x=T)
 
+# merging dataset with geometry and outputting geoJSON with Cambodia-only grid
+geo <- merge(geo, cells, by="ID")
+geo <- geo[which(geo$tc00_e>=10),]
+# geo2 <- as_Spatial(geo$geometry, IDs = as.character(geo$ID))
+# geo3 <- SpatialPolygonsDataFrame(geo2, geo, match.ID = "ID")
+# writeOGR(geo3[names(geo3)!="geometry"], "grids/cambodia_grid_trimmed.geojson", layer = "ID",
+#          driver = "GeoJSON")
+
+roads <- st_read("geocodeddata_dec2018/MacCambodia_Lines_SubsetAccurate.geojson")
 
 
 
