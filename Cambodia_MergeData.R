@@ -5,7 +5,7 @@
 # Outcome: Forest Loss using 30m Hansen cells aggregated to 5km LTDR, cumulative share of Hansen cells experiencing forest loss
 #######################
 
-library(sf); library(rgdal)
+library(sf); library(rgdal); library(spatialEco); library(geosphere)
 
 
 
@@ -81,6 +81,17 @@ geo <- geo[which(geo$tc00_e>=10),]
 
 roads <- st_read("geocodeddata_dec2018/MacCambodia_Lines_SubsetAccurate.geojson")
 
+temp <- as.data.frame(point.in.poly(roads[,c("id", "geometry")], geo3))
+temp <- temp[,c("id", "ID")]
+
+grid_road_intersect <- merge(geo, temp, by="ID", all.x=T)
+grid_road_intersect <- grid_road_intersect[!duplicated(grid_road_intersect$ID),]
+# grid_road_intersect2 <- as_Spatial(grid_road_intersect$geometry, IDs = as.character(grid_road_intersect$ID))
+# grid_road_intersect3 <- SpatialPolygonsDataFrame(grid_road_intersect2, grid_road_intersect, match.ID = "ID")
+# writeOGR(grid_road_intersect3[names(grid_road_intersect3)!="geometry"], "grids/cambodia_grid_matched.geojson",
+#          layer = "ID", driver = "GeoJSON")
+
+grid_road_intersect$midpoint <- sapply(grid_road_intersect$geometry, FUN = function(x) {list(centroid(matrix(unlist(x),ncol=2)))})
 
 
 
