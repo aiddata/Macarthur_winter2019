@@ -28,7 +28,7 @@ cells<-st_read(cells)
 
 ## Load the cell extracts and subset to Cambodia
 # for all SEA countries in original analysis
-extract<-read.csv("extracts/sea.csv")
+extract<-read.csv("extracts/sea.csv", stringsAsFactors = F)
 # subset extract to Cambodia
 extract2<-extract[extract$NAME_0=="Cambodia",]
 # drop INCORRECT ntl vars, to be replaced later
@@ -38,7 +38,7 @@ camb_cells <- extract3
 
 ## Merge in additional covars produced in separate extracts
 # Merge in ntl
-ntl<-read.csv("ntl_extracts/merge_sea_grid2.csv")
+ntl<-read.csv("ntl_extracts/merge_sea_grid2.csv", stringsAsFactors = F)
 colnames(ntl)<-gsub("v4composites_calibrated_201709.","ntl_",colnames(ntl))
 colnames(ntl)<-gsub(".mean","",colnames(ntl))
 # create time range trends for 2009-2013 to impute 2014 ntl data
@@ -74,24 +74,59 @@ geo <- merge(camb_cells, ntl, by="ID", all.x=T)
 # merging dataset with geometry and outputting geoJSON with Cambodia-only grid
 geo <- merge(geo, cells, by="ID")
 geo <- geo[which(geo$tc00_e>=10),]
-# geo2 <- as_Spatial(geo$geometry, IDs = as.character(geo$ID))
-# geo3 <- SpatialPolygonsDataFrame(geo2, geo, match.ID = "ID")
+geo2 <- as_Spatial(geo$geometry, IDs = as.character(geo$ID))
+geo3 <- SpatialPolygonsDataFrame(geo2, geo, match.ID = "ID")
 # writeOGR(geo3[names(geo3)!="geometry"], "grids/cambodia_grid_trimmed.geojson", layer = "ID",
 #          driver = "GeoJSON")
 
 roads <- st_read("geocodeddata_dec2018/MacCambodia_Lines_SubsetAccurate.geojson")
 
-temp <- as.data.frame(point.in.poly(roads[,c("id", "geometry")], geo3))
-temp <- temp[,c("id", "ID")]
+grid_road_merge <- as.data.frame(point.in.poly(roads[,c("id", "geometry")], geo3))
+grid_road_merge <- grid_road_merge[,c("id", "ID")]
+names(grid_road_merge)[names(grid_road_merge)=="id"] <- "road_id"
 
-grid_road_intersect <- merge(geo, temp, by="ID", all.x=T)
+grid_road_intersect <- merge(geo, grid_road_merge, by="ID", all.x=T)
 grid_road_intersect <- grid_road_intersect[!duplicated(grid_road_intersect$ID),]
 # grid_road_intersect2 <- as_Spatial(grid_road_intersect$geometry, IDs = as.character(grid_road_intersect$ID))
 # grid_road_intersect3 <- SpatialPolygonsDataFrame(grid_road_intersect2, grid_road_intersect, match.ID = "ID")
 # writeOGR(grid_road_intersect3[names(grid_road_intersect3)!="geometry"], "grids/cambodia_grid_matched.geojson",
 #          layer = "ID", driver = "GeoJSON")
 
+# find the midpoint of each grid cell and conduct "shortest distance" analysis
 grid_road_intersect$midpoint <- sapply(grid_road_intersect$geometry, FUN = function(x) {list(centroid(matrix(unlist(x),ncol=2)))})
+grid_road_intersect$road_id <- as.character(grid_road_intersect$road_id)
 
+# creating empty matrix to store min distance data
+dist <- matrix(data = NA, nrow = nrow(grid_road_intersect), ncol = 1+length(unique(grid_road_intersect$road_id))-1)
+dist[,1] <- sort(grid_road_intersect$ID)
+colnames(dist) <- c("cell", na.omit(unique(grid_road_intersect$road_id)))
+
+# looping over each road project ID and using the sapply function
+# to find the shortest distance for each cell in the data from the
+# cells for road project i
+for(i in colnames(dist)) {
+  if(i!="cell") {
+    
+    # create a temporary matrix of coords for midpoints of all cells intersecting road project i
+    temp <- grid_road_intersect$midpoint[which(grid_road_intersect$road_id==i)]
+    road <- matrix(data = unlist(temp), ncol = 2, byrow = T)
+    
+    dist[,i] <- sapply(sort(grid_road_intersect$ID), 
+                       FUN = function(x) {
+                         # find midpoint of cell x
+                         point <- unlist(grid_road_intersect$midpoint[grid_road_intersect$ID==x])
+                         # find min distance between cell x midpoint and a cell intersecting
+                         # the road project
+                         min_dist <- min(sqrt((point[1]-road[,1])^2 + (point[2]-road[,2])^2))
+                         return(min_dist)
+                       })
+  }
+}
+# select various combinations of cells and roads to test
+# temp1 <- unlist(grid_road_intersect$midpoint[which(grid_road_intersect$ID==97802)])
+# temp2 <- grid_road_intersect$midpoint[which(grid_road_intersect$road_id=="20")]
+# temp3 <- matrix(unlist(temp2), ncol = 2, byrow = T)
+# 
+# min(sqrt((temp1[1]-temp3[,1])^2 + (temp1[2]-temp3[,2])^2))
 
 
