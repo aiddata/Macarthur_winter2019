@@ -91,6 +91,31 @@ colnames(camb_cells)<-gsub("mpc41","minprecip",colnames(camb_cells))
 colnames(camb_cells)<-gsub("xpc41","maxprecip",colnames(camb_cells))
 colnames(camb_cells)<-gsub("epc41","meanprecip",colnames(camb_cells))
 
+## Create NDVI pre-trend
+# years 1990-2000
+#subset to ID and NDVI for years 1990 to 2000
+ndvi_9000<-camb_cells[,c(1,57:67)]
+ndvi_9000<-ndvi_9000[,order(names(ndvi_9000))]
+ndvi<-grep("ndvi",names(ndvi_9000))
+
+ndvi_reshape<-c(ndvi)
+ndvi_9000panel<-reshape(ndvi_9000,varying=ndvi_reshape, direction="long",idvar="ID",sep="_",timevar="year")
+
+#create pre-trends for 1990 to 2000
+
+obj_ndvi <- ndvi_9000panel %>% split(.$ID) %>% lapply (lm, formula=formula(ndvi~year))
+#extract one trend value for each cell ID
+obj_coefficients_ndvi <- as.data.frame(t(lapply(obj_ndvi, function(x) as.numeric(x[1]$coefficients[2]))))
+obj_coeff_ndvi<-as.data.frame(t(obj_coefficients_ndvi))
+obj_coeff_ndvi$rownumber <- as.numeric(rownames(obj_coeff_ndvi))
+
+#rename columns to trend and cell id
+names(obj_coeff_ndvi)[names(obj_coeff_ndvi)=="V1"]="ndvi_pretrend"
+names(obj_coeff_ndvi)[names(obj_coeff_ndvi)=="rownumber"]="ID"
+obj_coeff_ndvi$ndvi_pretrend<-as.numeric(obj_coeff_ndvi$ndvi_pretrend)
+
+#merge
+camb_cells<-merge(camb_cells, obj_coeff_ndvi)
 
 # ----------------
 ## Merge in NTL and create pre-trends
@@ -165,7 +190,70 @@ ntl_all<-ntl_all[,!names(ntl_all) %in% c("ntl_2014_imp")]
 camb_cells1<-merge(camb_cells, ntl_all, by="ID")
 camb_cells<-camb_cells1
 
+#---------------
+# Add in GPW4 Data, Protected Areas, concessions, plantation data
+#---------------
 
+## Protected Areas
+#WDPA
+#read in data
+pa_2000 <- read.csv("ProtectedAreas_Data/merge_sea_grid_pre2001.csv")
+#Create new column with percentage of cell covered by protected area
+pa_2000$wdpapct_2000 <- NA
+pa_2000$wdpapct_2000 <- pa_2000$wdpa_pre2001_sea.na.sum/pa_2000$wdpa_pre2001_sea.na.count
+#drop out sum and count calculations to leave only percent covered by protected area
+pa_2000<-pa_2000[,c(1,4)]
+#merge into camb_cells
+camb_covars<-merge(camb_cells, pa_2000, by="ID")
 
+## ODC concessions data
+# Open Development Cambodia
+# the percentage of cell coverage calculated below is for the full concessions dataset
+# it is possible to subset the dataset for concessions that were granted before Chinese investments (pre-2001)
+# the "concessions_subset" sum and count included in the dataset below are for concessions pre-2004, not 2001
+con <- read.csv("ODCConcessions/merge_sea_grid.csv")
+#create percentage of cell covered by all concessions in dataset
+con$concessionpct_all<-NA
+con$concessionpct_all<- con$concessions.na.sum/con$concessions.na.count
+#drop unused vars and merge with camb_covars
+con <- con[,-grep("(na)", names(con))]
+camb_covars<-merge(camb_covars, con, by="ID")
 
+## Plantations Data
+# Global Forest Watch, 2013-2014
+gfw <- read.csv("GFWPlantation/merge_sea_grid.csv")
+#create percentage of cell covered by all plantations in dataset (121 is the max number of grids in a 5km cell)
+gfw$plantation_pct<-NA
+gfw$plantation_pct<-gfw$gfw_plantations_sea.na.sum/121
+#drop unused vars and merge with camb_covars
+gfw <- gfw[,-grep("(sea)",names(gfw))]
+camb_covars<-merge(camb_covars, gfw, by="ID")
+
+## GPW Population Data
+pop <- read.csv("GPW4_Extracts/merge_sea_grid.csv")
+colnames(pop)<-gsub("v4_density.","",colnames(pop))
+colnames(pop)<-gsub(".mean","",colnames(pop))
+# in original analysis, used values from 2000 for 2000-2004, 2005 for 2005-2009, etc. (did not impute, just copied)
+# did not impute, just copied values for 5 years
+for (i in 2001:2004)
+{
+  pop[[paste0("gpw_",i)]]<-pop$gpw_2000
+}
+
+for (i in 2006:2009)
+{
+  pop[[paste0("gpw_",i)]]<-pop$gpw_2005
+}
+
+for (i in 2011:2014)
+{
+  pop[[paste0("gpw_",i)]]<-pop$gpw_2010
+}
+
+#reorder and merge into camb_covars
+pop<-pop[,order(names(pop))]
+camb_covars<-merge(camb_covars, pop)
+
+#Write to file
+write.csv(camb_covars,"processed_data/CambodiaCovars_cross")
 
