@@ -117,7 +117,13 @@ for(i in colnames(dist)) {
                          point <- unlist(grid_road_intersect$midpoint[grid_road_intersect$ID==x])
                          # find min distance between cell x midpoint and a cell intersecting
                          # the road project
-                         min_dist <- min(sqrt((point[1]-road[,1])^2 + (point[2]-road[,2])^2))
+                         lat <- (point[2]-road[,2])*110.574
+                         long <- (point[1]-road[,1])*111.320*cos(lat)
+                         
+                         min_dist <- min(sqrt(lat^2 + long^2))
+                         
+                         
+                         #min_dist <- min(sqrt(((point[1]-road[,1])*110.574)^2 + ((point[2]-road[,2]))^2))
                          return(min_dist)
                        })
   }
