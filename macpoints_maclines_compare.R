@@ -3,12 +3,13 @@
 
 library(sf)
 
+#set wd to Box Sync since using files from both MacArthur_Winter2019 and original MacArthur folders
 setwd("/Users/rbtrichler/Box Sync")
 
-## Read in New Cambodia Lines Dataset (from Miranda)
+## Read in New Cambodia Lines Dataset (sent from Miranda)
 
 # Read in Cambodia lines geo-referenced
-maclines <- "MacArthur_Winter2019/geocodeddata_dec2018/inputdata/MacCambodia_lines.geojson"
+maclines <- "MacArthur_Winter2019/geocodeddata_dec2018/MacCambodia_lines.geojson"
 maclines <- st_read(maclines)
 
 # Convert to dataframe
@@ -61,8 +62,30 @@ maclines_prec$project_id[is.na(maclines_prec$start_planned)]
 maclines_prec$start_actual[is.na(maclines_prec$end_actual)]
 maclines_prec$start_actual[is.na(maclines_prec$end_actual)]
 
-
+#Write file as CSV
 write.csv(maclines,"MacArthur_Winter2019/geocodeddata_dec2018/MacCambodia_lines.csv")
+
+#Identify locations that are straight lines and polygons and subset them out of maclines_prec
+#Using QGIS, identified straight lines as having the following ids:
+# id: 12, 14, 15, 41, 42, 43, 45, 46
+#Using QGIS, identifed polygons as having the following ids:
+# id: 3, 24, 26, 27, 37, 40, 48
+
+exclude_ids <- c(3,12,14,15,24,26,27,37,40,41,42,43,45,46,48)
+#subset maclines_prec to remove straight lines and polygons (so can be re-geocoded)
+maclines_true <- maclines_prec[!(maclines_prec$id %in% exclude_ids),]
+unique(maclines_prec$id)
+unique(maclines_true$id)
+
+include_ids<-unique(maclines_true$id)
+maclines_true_geo <- maclines_geo[maclines_geo$id %in% include_ids,]
+
+# Output maclines_true file with geography
+# This dataset includes only those that were plotted as actual lines (not straight lines or polygons)
+mac_new<-st_sf(maclines_true, geometry=maclines_true_geo$geometry)
+st_write(mac_new, "MacArthur_Winter2019/geocodeddata_dec2018/MacCambodia_Lines_SubsetAccurate",layer="mac_new",driver="GeoJSON")
+
+
 
 
 
