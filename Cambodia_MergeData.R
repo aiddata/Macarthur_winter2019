@@ -11,7 +11,7 @@ library(sf)
 
 ## Set working directory
 setwd("/Users/rbtrichler/Box Sync/Macarthur_winter2019")
-
+# setwd("~/Box Sync/Macarthur_winter2019")
 
 ##---------
 ## Read in Cell Level Data
@@ -94,7 +94,7 @@ colnames(camb_cells)<-gsub("epc41","meanprecip",colnames(camb_cells))
 ## Create NDVI pre-trend
 # years 1990-2000
 #subset to ID and NDVI for years 1990 to 2000
-ndvi_9000<-camb_cells[,c(1,57:67)]
+ndvi_9000<-camb_cells[c("ID", grep(paste0("ndvi_", 1990:2000, collapse="|"), names(camb_cells), value=T))]
 ndvi_9000<-ndvi_9000[,order(names(ndvi_9000))]
 ndvi<-grep("ndvi",names(ndvi_9000))
 
@@ -130,7 +130,7 @@ colnames(ntl)<-gsub(".mean","",colnames(ntl))
 # create time range trends for 2009-2013 to impute 2014 ntl data
 # first create ntl panel dataset for 2009 to 2013 and then can do time range trends 
 ntl_order<-ntl[,order(names(ntl))]
-ntl_0913<-ntl_order[,c(1,19:23)]
+ntl_0913<-ntl_order[c("ID", grep(paste0("ntl_", 2009:2013, collapse="|"), names(ntl_order), value=T))]
 ntl<-grep("ntl",names(ntl_0913))
 
 ntl_reshape <- c(ntl)
@@ -152,7 +152,7 @@ names(obj_coeff)[names(obj_coeff)=="rownumber"]="ID"
 obj_coeff$ntltrend_0913<-as.numeric(obj_coeff$ntltrend_0913)
 
 # create ntl_pretrend for years 1992-2000
-ntl_9200<-ntl_order[,c(1:10)]
+ntl_9200<-ntl_order[c("ID", grep(paste0("ntl_", 1992:2000, collapse="|"), names(ntl_order), value=T))]
 ntl_pre<-grep("ntl",names(ntl_9200))
 
 ntl_reshape_pre <- c(ntl_pre)
@@ -202,7 +202,7 @@ pa_2000 <- read.csv("ProtectedAreas_Data/merge_sea_grid_pre2001.csv")
 pa_2000$wdpapct_2000 <- NA
 pa_2000$wdpapct_2000 <- pa_2000$wdpa_pre2001_sea.na.sum/pa_2000$wdpa_pre2001_sea.na.count
 #drop out sum and count calculations to leave only percent covered by protected area
-pa_2000<-pa_2000[,c(1,4)]
+pa_2000<-pa_2000[grepl("ID|wdpapct_2000", names(pa_2000))]
 #merge into camb_cells
 camb_covars<-merge(camb_cells, pa_2000, by="ID")
 
@@ -255,5 +255,5 @@ pop<-pop[,order(names(pop))]
 camb_covars<-merge(camb_covars, pop)
 
 #Write to file
-write.csv(camb_covars,"processed_data/CambodiaCovars_cross")
+# write.csv(camb_covars,"processed_data/CambodiaCovars_cross")
 
