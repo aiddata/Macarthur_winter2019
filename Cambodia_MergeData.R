@@ -5,7 +5,7 @@
 # Outcome: Forest Loss using 30m Hansen cells aggregated to 5km LTDR, cumulative share of Hansen cells experiencing forest loss
 #######################
 
-library(sf)
+library(sf); library(raster); library(sp); library(spatialEco); library(geosphere)
 
 
 
@@ -256,4 +256,61 @@ camb_covars<-merge(camb_covars, pop)
 
 #Write to file
 # write.csv(camb_covars,"processed_data/CambodiaCovars_cross")
+
+
+### Treatment Data ###
+
+# merge geometry back into grid cell dataset
+cells2 <- merge(camb_covars, cells, by="ID", all.x=T)
+rownames(cells2) <- c(1:nrow(cells2))
+grid <- as_Spatial(cells2$geometry, IDs=as.character(c(1:nrow(cells2))))
+grid <- SpatialPolygonsDataFrame(Sr=grid, data = cells2)
+
+# find midpoint coords of each grid cell
+grid_df <- as.data.frame(grid)
+grid_df$midpoint <- sapply(grid_df$geometry, FUN = function(x) list(centroid(matrix(unlist(x), ncol = 2))))
+grid_df$lat <- sapply(grid_df$midpoint, FUN = function(x) x[,"lat"])
+grid_df$lon <- sapply(grid_df$midpoint, FUN = function(x) x[,"lon"])
+
+# read in road data
+roads <- st_read("geocodeddata_dec2018/MacCambodia_Lines_SubsetAccurate.geojson", stringsAsFactors=F)
+
+# identify grid cells intersecting with road projects
+intersection <- as.data.frame(point.in.poly(roads, grid))
+intersection <- merge(intersection, cells, by="ID", all.x=T)
+names(intersection)[names(intersection)=="id"] <- "road_id"
+names(intersection)[names(intersection)=="ID"] <- "cell_id"
+
+# midpoints of grid cells intersecting w/ roads
+intersection$midpoint <- sapply(intersection$geometry, FUN = function(x) list(centroid(matrix(unlist(x), ncol = 2))))
+intersection$lat <- sapply(intersection$midpoint, FUN = function(x) x[,"lat"])
+intersection$lon <- sapply(intersection$midpoint, FUN = function(x) x[,"lon"])
+
+# create skeleton for grid cell "distance to road" matrix
+dist <- matrix(data = NA, nrow = nrow(grid), ncol = length(unique(intersection$road_id))+1)
+colnames(dist) <- c("cell", unique(roads$id))
+dist[,1] <- sort(grid$ID)
+
+# filling the distance matrix with minimum distance from each grid cell to each road project
+for(i in colnames(dist)[2:ncol(dist)]) {
+  # midpoints for each grid intersecting road project i
+  roadCoords <- intersection[which(intersection$road_id==i), c("lat", "lon")]
+  
+  
+  dist[,i] <- sapply(sort(grid_df$ID),
+                     FUN = function(x) {
+                       # identify midpoint of grid cell x
+                       point <- grid_df[which(grid_df$ID==x), c("lat", "lon")]
+                       # find the distance between the midpoint of grid cell x and the midpoint of
+                       # each grid cell intersecting road project i (convert to kilometers)
+                       lat <- (point[1]-roadCoords[,1])*110.574
+                       lon <- (point[2]-roadCoords[,2])*111.320*cos(lat)
+                       # identify the minimum distance from midpoint of grid cell x to a midpoint of 
+                       # road project i
+                       minDist <- min(sqrt(lat^2 + lon^2))
+                       return(minDist)
+
+                     })
+}
+
 
