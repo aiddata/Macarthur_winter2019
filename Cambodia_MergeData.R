@@ -5,7 +5,7 @@
 # Outcome: Forest Loss using 30m Hansen cells aggregated to 5km LTDR, cumulative share of Hansen cells experiencing forest loss
 #######################
 
-library(sf); library(raster); library(sp); library(spatialEco); library(geosphere)
+library(sf); library(raster); library(sp); library(spatialEco); library(geosphere); library(foreign)
 
 
 
@@ -286,12 +286,13 @@ intersection$midpoint <- sapply(intersection$geometry, FUN = function(x) list(ce
 intersection$lat <- sapply(intersection$midpoint, FUN = function(x) x[,"lat"])
 intersection$lon <- sapply(intersection$midpoint, FUN = function(x) x[,"lon"])
 
-### NEED TO SUBSET THE CAMBODIA GRID TO 10%+ forested areas
+# subset grid to 10+% forested areas
+grid_df <- grid_df[which(grid_df$tc00_e>=10),]
 
 # create skeleton for grid cell "distance to road" matrix
-dist <- matrix(data = NA, nrow = nrow(grid), ncol = length(unique(intersection$road_id))+1)
+dist <- matrix(data = NA, nrow = nrow(grid_df), ncol = length(unique(intersection$road_id))+1)
 colnames(dist) <- c("cell", unique(roads$id))
-dist[,1] <- sort(grid$ID)
+dist[,1] <- sort(grid_df$ID)
 
 # filling the distance matrix with minimum distance from each grid cell to each road project
 for(i in colnames(dist)[2:ncol(dist)]) {
@@ -349,3 +350,53 @@ for(i in treatment[,1]) {
   }
 }
 
+###
+
+# convert treatment to data frame and assign names before merging with covars
+treatment <- as.data.frame(treatment)
+names(treatment) <- c("ID", paste0("trt_", 2003:2014))
+
+# merge treatment with covars
+pre_panel <- merge(grid_df, treatment, by="ID")
+
+# add new variables with missing values for missing years
+pre_panel[paste0("trt_", 1980:2002)] <- NA
+pre_panel[paste0("ntl_", 1980:1991)] <- NA
+pre_panel[paste0("ndvi_", 1980)] <- NA
+pre_panel[paste0("gpw_", 1980:1999)] <- NA
+pre_panel[paste0("per_loss_", 1980:2000)] <- NA
+
+# reshape long into panel
+panel <- reshape(data = pre_panel, direction = "long", idvar = "ID", sep = "_", timevar = "year",
+                 varying = list(paste0("ntl_", 1980:2014),
+                                paste0("trt_", 1980:2014),
+                                paste0("ndvi_", 1980:2014),
+                                paste0("mintemp_", 1980:2014),
+                                paste0("minprecip_", 1980:2014),
+                                paste0("meantemp_", 1980:2014),
+                                paste0("meanprecip_", 1980:2014),
+                                paste0("maxtemp_", 1980:2014),
+                                paste0("maxprecip_", 1980:2014),
+                                paste0("gpw_", 1980:2014),
+                                paste0("per_loss_", 1980:2014)))
+
+panel$year <- panel$year + 1979
+
+# only keep necessary variables
+panel <- panel[c("ID", "NAME_1", "NAME_2", "year", "tc00_e", "rivdist", "roaddist", "elevation", 
+                 "slope", "urbtravtime", "gpw3_1990e", "gpw3_1995e", "gpw3_2000e", "ndvi_pretrend",
+                 "ntltrend_0913", "ntlpretrend_9200", "wdpapct_2000", "concessionpct_all",
+                 "plantation_pct", "ntl_1980", "trt_1980", "ndvi_1980", "mintemp_1980",
+                 "minprecip_1980", "meantemp_1980", "meanprecip_1980", "maxtemp_1980",
+                 "maxprecip_1980", "gpw_1980", "per_loss_1980")]
+
+# rename variables
+names(panel) <- c("cell_id", "prov_name", "dist_name", "year", "tc00_e", "rivdist", "roaddist",
+                  "elevation", "slope", "urbtravtime", "gpw3_1990e", "gpw3_1995e", "gpw3_2000e", 
+                  "ndvi_pretrend", "ntltrend_0913", "ntlpretrend_9200", "wdpapct_2000", 
+                  "concessionpct_all", "plantation_pct", "ntl", "trt", "ndvi", "mintemp",
+                  "minprecip", "meantemp", "meanprecip", "maxtemp", "maxprecip", "gpw", "per_loss")
+
+# write data to MacArthur_Winter2019 Box Sync
+# write.csv(panel, file = "processed_data/panel.csv", row.names = F)
+# write.dta(panel, file = "processed_data/panel.dta")
