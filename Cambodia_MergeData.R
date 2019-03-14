@@ -286,6 +286,8 @@ intersection$midpoint <- sapply(intersection$geometry, FUN = function(x) list(ce
 intersection$lat <- sapply(intersection$midpoint, FUN = function(x) x[,"lat"])
 intersection$lon <- sapply(intersection$midpoint, FUN = function(x) x[,"lon"])
 
+### NEED TO SUBSET THE CAMBODIA GRID TO 10%+ forested areas
+
 # create skeleton for grid cell "distance to road" matrix
 dist <- matrix(data = NA, nrow = nrow(grid), ncol = length(unique(intersection$road_id))+1)
 colnames(dist) <- c("cell", unique(roads$id))
@@ -296,21 +298,20 @@ for(i in colnames(dist)[2:ncol(dist)]) {
   # midpoints for each grid intersecting road project i
   roadCoords <- intersection[which(intersection$road_id==i), c("lat", "lon")]
   
-  
   dist[,i] <- sapply(sort(grid_df$ID),
                      FUN = function(x) {
                        # identify midpoint of grid cell x
                        point <- grid_df[which(grid_df$ID==x), c("lat", "lon")]
-                       # find the distance between the midpoint of grid cell x and the midpoint of
-                       # each grid cell intersecting road project i (convert to kilometers)
-                       lat <- (point[1]-roadCoords[,1])*110.574
-                       lon <- (point[2]-roadCoords[,2])*111.320*cos(lat)
+
                        # identify the minimum distance from midpoint of grid cell x to a midpoint of 
                        # road project i
-                       minDist <- min(sqrt(lat^2 + lon^2))
+                       minDist <- min(distHaversine(point[c("lon", "lat")], roadCoords[c("lon", "lat")]))/1000
+
                        return(minDist)
 
                      })
 }
 
+###
 
+load(file = "/Users/christianbaehr/cambodia_correl.RData")
