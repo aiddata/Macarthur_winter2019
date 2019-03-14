@@ -314,4 +314,38 @@ for(i in colnames(dist)[2:ncol(dist)]) {
 
 ###
 
-load(file = "/Users/christianbaehr/cambodia_correl.RData")
+# load in correlogram data
+load(file = "/Users/christianbaehr/GitHub/MacArthur/modelData/cambodia_correl.RData")
+correl <- do.call(cbind, correlogram_data[c("mean.of.class", "correlation")])
+
+# remove NAs from roads year variable
+years <- na.omit(roads$year)
+
+# build skeleton treatment matrix
+treatment <- matrix(data = NA, nrow = nrow(dist), ncol = length(seq(min(years), max(years), 1))+1)
+colnames(treatment) <- c("cell_id", seq(min(years), max(years), 1))
+# fill first treatment column with cell IDs
+treatment[,1] <- dist[,1]
+
+# fill treatment matrix
+for(i in treatment[,1]) {
+  for(j in seq(min(years),max(years),1)) {
+    
+    # select IDs of roads completed during or before year j
+    tempRoads <- roads$id[which(roads$year<=j)]
+    # select the distance from cell i to each road completed by year j
+    tempDist <- dist[dist[,1]==i, colnames(dist) %in% tempRoads]
+    
+    x <- NULL
+    for(k in tempDist) {
+      # find the correlogram value nearest to each tempDist value
+      x[length(x)+1] <- correl[which.min(abs(k-correl[,1])), 2]
+      
+    }
+    
+    # sum the correlogram values for cell i relative to all roads completed before year j
+    treatment[treatment[,1]==i, colnames(treatment)==as.character(j)] <- sum(x)
+    
+  }
+}
+
