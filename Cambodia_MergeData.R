@@ -255,7 +255,7 @@ pop<-pop[,order(names(pop))]
 camb_covars<-merge(camb_covars, pop)
 
 #Write to file
-# write.csv(camb_covars,"processed_data/CambodiaCovars_cross")
+# write.csv(camb_covars,"processed_data/CambodiaCovars_cross.csv", row.names=F)
 
 
 ### Treatment Data ###
@@ -313,6 +313,9 @@ for(i in colnames(dist)[2:ncol(dist)]) {
                      })
 }
 
+# subset dataset to grid cells w/in 121km of a road project
+# dist <- dist[which(apply(dist[,-1], 1, function(x) {min(x)})<=121),]
+
 ###
 
 # load in correlogram data
@@ -339,8 +342,16 @@ for(i in treatment[,1]) {
     
     x <- NULL
     for(k in tempDist) {
-      # find the correlogram value nearest to each tempDist value
-      x[length(x)+1] <- correl[which.min(abs(k-correl[,1])), 2]
+      
+      y <- correl[which.min(abs(k-correl[,1])), ]
+      
+      if(y[1]>121) {
+        x[length(x)+1] <- 0
+      } else {
+        # find the correlogram value nearest to each tempDist value
+        x[length(x)+1] <- y[2]
+        
+      }
       
     }
     
@@ -400,3 +411,10 @@ names(panel) <- c("cell_id", "prov_name", "dist_name", "year", "tc00_e", "rivdis
 # write data to MacArthur_Winter2019 Box Sync
 # write.csv(panel, file = "processed_data/panel.csv", row.names = F)
 # write.dta(panel, file = "processed_data/panel.dta")
+
+# test data to check that treatment values are generally higher near road projects
+# test <- pre_panel
+# test$geometry <- as_Spatial(test$geometry, IDs = as.character(1:nrow(test)))
+# test2 <- SpatialPolygonsDataFrame(Sr=test$geometry, data = test)
+# library(rgdal)
+# writeOGR(obj=test2[!names(test2) %in% c("geometry", "midpoint")], dsn="/Users/christianbaehr/Desktop/test_vis.GeoJSON", layer = "trt_2014", driver = "GeoJSON")
