@@ -322,6 +322,20 @@ for(i in colnames(dist)[2:ncol(dist)]) {
 load(file = "/Users/christianbaehr/GitHub/MacArthur/modelData/cambodia_correl.RData")
 correl <- do.call(cbind, correlogram_data[c("mean.of.class", "correlation")])
 
+test.correl <- as.data.frame(correl)
+test.mod <- lm(correlation ~ log(mean.of.class), data = test.correl)
+plot(test.correl$mean.of.class, test.correl$correlation)
+xvec <- seq(min(test.correl$mean.of.class), max(test.correl$mean.of.class), by=0.01)
+logPred <- predict(test.mod, newdata=data.frame(mean.of.class=xvec))
+lines(xvec, logPred, col="blue", lwd=3)
+
+trimmed.correl <- as.data.frame(correl[correl[,1] <= 121,])
+test.mod <- lm(correlation ~ log(mean.of.class), data = trimmed.correl)
+xvec <- seq(min(test.correl$mean.of.class), max(test.correl$mean.of.class), by=0.01)
+logPred <- predict(test.mod, newdata=data.frame(mean.of.class=xvec))
+lines(xvec, logPred, col="red", lwd=3)
+abline(v=121)
+
 # remove NAs from roads year variable
 years <- na.omit(roads$year)
 
