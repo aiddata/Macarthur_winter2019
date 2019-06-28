@@ -5,13 +5,13 @@
 # Outcome: Forest Loss using 30m Hansen cells aggregated to 5km LTDR, cumulative share of Hansen cells experiencing forest loss
 #######################
 
-library(sf)
+library(sf); library(raster); library(sp); library(spatialEco); library(geosphere); library(foreign)
 
 
 
 ## Set working directory
 setwd("/Users/rbtrichler/Box Sync/Macarthur_winter2019")
-
+# setwd("~/Box Sync/Macarthur_winter2019")
 
 ##---------
 ## Read in Cell Level Data
@@ -94,7 +94,7 @@ colnames(camb_cells)<-gsub("epc41","meanprecip",colnames(camb_cells))
 ## Create NDVI pre-trend
 # years 1990-2000
 #subset to ID and NDVI for years 1990 to 2000
-ndvi_9000<-camb_cells[,c(1,57:67)]
+ndvi_9000<-camb_cells[c("ID", grep(paste0("ndvi_", 1990:2000, collapse="|"), names(camb_cells), value=T))]
 ndvi_9000<-ndvi_9000[,order(names(ndvi_9000))]
 ndvi<-grep("ndvi",names(ndvi_9000))
 
@@ -130,7 +130,7 @@ colnames(ntl)<-gsub(".mean","",colnames(ntl))
 # create time range trends for 2009-2013 to impute 2014 ntl data
 # first create ntl panel dataset for 2009 to 2013 and then can do time range trends 
 ntl_order<-ntl[,order(names(ntl))]
-ntl_0913<-ntl_order[,c(1,19:23)]
+ntl_0913<-ntl_order[c("ID", grep(paste0("ntl_", 2009:2013, collapse="|"), names(ntl_order), value=T))]
 ntl<-grep("ntl",names(ntl_0913))
 
 ntl_reshape <- c(ntl)
@@ -152,7 +152,7 @@ names(obj_coeff)[names(obj_coeff)=="rownumber"]="ID"
 obj_coeff$ntltrend_0913<-as.numeric(obj_coeff$ntltrend_0913)
 
 # create ntl_pretrend for years 1992-2000
-ntl_9200<-ntl_order[,c(1:10)]
+ntl_9200<-ntl_order[c("ID", grep(paste0("ntl_", 1992:2000, collapse="|"), names(ntl_order), value=T))]
 ntl_pre<-grep("ntl",names(ntl_9200))
 
 ntl_reshape_pre <- c(ntl_pre)
@@ -202,7 +202,7 @@ pa_2000 <- read.csv("ProtectedAreas_Data/merge_sea_grid_pre2001.csv")
 pa_2000$wdpapct_2000 <- NA
 pa_2000$wdpapct_2000 <- pa_2000$wdpa_pre2001_sea.na.sum/pa_2000$wdpa_pre2001_sea.na.count
 #drop out sum and count calculations to leave only percent covered by protected area
-pa_2000<-pa_2000[,c(1,4)]
+pa_2000<-pa_2000[grepl("ID|wdpapct_2000", names(pa_2000))]
 #merge into camb_cells
 camb_covars<-merge(camb_cells, pa_2000, by="ID")
 
@@ -255,5 +255,180 @@ pop<-pop[,order(names(pop))]
 camb_covars<-merge(camb_covars, pop)
 
 #Write to file
-write.csv(camb_covars,"processed_data/CambodiaCovars_cross")
+# write.csv(camb_covars,"processed_data/CambodiaCovars_cross.csv", row.names=F)
 
+
+### Treatment Data ###
+
+# merge geometry back into grid cell dataset
+cells2 <- merge(camb_covars, cells, by="ID", all.x=T)
+rownames(cells2) <- c(1:nrow(cells2))
+grid <- as_Spatial(cells2$geometry, IDs=as.character(c(1:nrow(cells2))))
+grid <- SpatialPolygonsDataFrame(Sr=grid, data = cells2)
+
+# find midpoint coords of each grid cell
+grid_df <- as.data.frame(grid)
+grid_df$midpoint <- sapply(grid_df$geometry, FUN = function(x) list(centroid(matrix(unlist(x), ncol = 2))))
+grid_df$lat <- sapply(grid_df$midpoint, FUN = function(x) x[,"lat"])
+grid_df$lon <- sapply(grid_df$midpoint, FUN = function(x) x[,"lon"])
+
+# read in road data
+roads <- st_read("geocodeddata_dec2018/MacCambodia_Lines_SubsetAccurate.geojson", stringsAsFactors=F)
+
+# identify grid cells intersecting with road projects
+intersection <- as.data.frame(point.in.poly(roads, grid))
+intersection <- merge(intersection, cells, by="ID", all.x=T)
+names(intersection)[names(intersection)=="id"] <- "road_id"
+names(intersection)[names(intersection)=="ID"] <- "cell_id"
+
+# midpoints of grid cells intersecting w/ roads
+intersection$midpoint <- sapply(intersection$geometry, FUN = function(x) list(centroid(matrix(unlist(x), ncol = 2))))
+intersection$lat <- sapply(intersection$midpoint, FUN = function(x) x[,"lat"])
+intersection$lon <- sapply(intersection$midpoint, FUN = function(x) x[,"lon"])
+
+# subset grid to 10+% forested areas
+grid_df <- grid_df[which(grid_df$tc00_e>=10),]
+
+# create skeleton for grid cell "distance to road" matrix
+dist <- matrix(data = NA, nrow = nrow(grid_df), ncol = length(unique(intersection$road_id))+1)
+colnames(dist) <- c("cell", unique(roads$id))
+dist[,1] <- sort(grid_df$ID)
+
+# filling the distance matrix with minimum distance from each grid cell to each road project
+for(i in colnames(dist)[2:ncol(dist)]) {
+  # midpoints for each grid intersecting road project i
+  roadCoords <- intersection[which(intersection$road_id==i), c("lat", "lon")]
+  
+  dist[,i] <- sapply(sort(grid_df$ID),
+                     FUN = function(x) {
+                       # identify midpoint of grid cell x
+                       point <- grid_df[which(grid_df$ID==x), c("lat", "lon")]
+
+                       # identify the minimum distance from midpoint of grid cell x to a midpoint of 
+                       # road project i
+                       minDist <- min(distHaversine(point[c("lon", "lat")], roadCoords[c("lon", "lat")]))/1000
+
+                       return(minDist)
+
+                     })
+}
+
+# subset dataset to grid cells w/in 121km of a road project
+# dist <- dist[which(apply(dist[,-1], 1, function(x) {min(x)})<=121),]
+
+###
+
+# load in correlogram data
+load(file = "/Users/christianbaehr/GitHub/MacArthur/modelData/cambodia_correl.RData")
+correl <- do.call(cbind, correlogram_data[c("mean.of.class", "correlation")])
+
+test.correl <- as.data.frame(correl)
+test.mod <- lm(correlation ~ log(mean.of.class), data = test.correl)
+plot(test.correl$mean.of.class, test.correl$correlation)
+xvec <- seq(min(test.correl$mean.of.class), max(test.correl$mean.of.class), by=0.01)
+logPred <- predict(test.mod, newdata=data.frame(mean.of.class=xvec))
+lines(xvec, logPred, col="blue", lwd=3)
+
+trimmed.correl <- as.data.frame(correl[correl[,1] <= 121,])
+test.mod <- lm(correlation ~ log(mean.of.class), data = trimmed.correl)
+xvec <- seq(min(test.correl$mean.of.class), max(test.correl$mean.of.class), by=0.01)
+logPred <- predict(test.mod, newdata=data.frame(mean.of.class=xvec))
+lines(xvec, logPred, col="red", lwd=3)
+abline(v=121)
+
+# remove NAs from roads year variable
+years <- na.omit(roads$year)
+
+# build skeleton treatment matrix
+treatment <- matrix(data = NA, nrow = nrow(dist), ncol = length(seq(min(years), max(years), 1))+1)
+colnames(treatment) <- c("cell_id", seq(min(years), max(years), 1))
+# fill first treatment column with cell IDs
+treatment[,1] <- dist[,1]
+
+# fill treatment matrix
+for(i in treatment[,1]) {
+  for(j in seq(min(years),max(years),1)) {
+    
+    # select IDs of roads completed during or before year j
+    tempRoads <- roads$id[which(roads$year<=j)]
+    # select the distance from cell i to each road completed by year j
+    tempDist <- dist[dist[,1]==i, colnames(dist) %in% tempRoads]
+    
+    x <- NULL
+    for(k in tempDist) {
+      
+      y <- correl[which.min(abs(k-correl[,1])), ]
+      
+      if(y[1]>121) {
+        x[length(x)+1] <- 0
+      } else {
+        # find the correlogram value nearest to each tempDist value
+        x[length(x)+1] <- y[2]
+        
+      }
+      
+    }
+    
+    # sum the correlogram values for cell i relative to all roads completed before year j
+    treatment[treatment[,1]==i, colnames(treatment)==as.character(j)] <- sum(x)
+    
+  }
+}
+
+###
+
+# convert treatment to data frame and assign names before merging with covars
+treatment <- as.data.frame(treatment)
+names(treatment) <- c("ID", paste0("trt_", 2003:2014))
+
+# merge treatment with covars
+pre_panel <- merge(grid_df, treatment, by="ID")
+
+# add new variables with missing values for missing years
+pre_panel[paste0("trt_", 1980:2002)] <- NA
+pre_panel[paste0("ntl_", 1980:1991)] <- NA
+pre_panel[paste0("ndvi_", 1980)] <- NA
+pre_panel[paste0("gpw_", 1980:1999)] <- NA
+pre_panel[paste0("per_loss_", 1980:2000)] <- NA
+
+# reshape long into panel
+panel <- reshape(data = pre_panel, direction = "long", idvar = "ID", sep = "_", timevar = "year",
+                 varying = list(paste0("ntl_", 1980:2014),
+                                paste0("trt_", 1980:2014),
+                                paste0("ndvi_", 1980:2014),
+                                paste0("mintemp_", 1980:2014),
+                                paste0("minprecip_", 1980:2014),
+                                paste0("meantemp_", 1980:2014),
+                                paste0("meanprecip_", 1980:2014),
+                                paste0("maxtemp_", 1980:2014),
+                                paste0("maxprecip_", 1980:2014),
+                                paste0("gpw_", 1980:2014),
+                                paste0("per_loss_", 1980:2014)))
+
+panel$year <- panel$year + 1979
+
+# only keep necessary variables
+panel <- panel[c("ID", "NAME_1", "NAME_2", "year", "tc00_e", "rivdist", "roaddist", "elevation", 
+                 "slope", "urbtravtime", "gpw3_1990e", "gpw3_1995e", "gpw3_2000e", "ndvi_pretrend",
+                 "ntltrend_0913", "ntlpretrend_9200", "wdpapct_2000", "concessionpct_all",
+                 "plantation_pct", "ntl_1980", "trt_1980", "ndvi_1980", "mintemp_1980",
+                 "minprecip_1980", "meantemp_1980", "meanprecip_1980", "maxtemp_1980",
+                 "maxprecip_1980", "gpw_1980", "per_loss_1980")]
+
+# rename variables
+names(panel) <- c("cell_id", "prov_name", "dist_name", "year", "tc00_e", "rivdist", "roaddist",
+                  "elevation", "slope", "urbtravtime", "gpw3_1990e", "gpw3_1995e", "gpw3_2000e", 
+                  "ndvi_pretrend", "ntltrend_0913", "ntlpretrend_9200", "wdpapct_2000", 
+                  "concessionpct_all", "plantation_pct", "ntl", "trt", "ndvi", "mintemp",
+                  "minprecip", "meantemp", "meanprecip", "maxtemp", "maxprecip", "gpw", "per_loss")
+
+# write data to MacArthur_Winter2019 Box Sync
+# write.csv(panel, file = "processed_data/panel.csv", row.names = F)
+# write.dta(panel, file = "processed_data/panel.dta")
+
+# test data to check that treatment values are generally higher near road projects
+# test <- pre_panel
+# test$geometry <- as_Spatial(test$geometry, IDs = as.character(1:nrow(test)))
+# test2 <- SpatialPolygonsDataFrame(Sr=test$geometry, data = test)
+# library(rgdal)
+# writeOGR(obj=test2[!names(test2) %in% c("geometry", "midpoint")], dsn="/Users/christianbaehr/Desktop/test_vis.GeoJSON", layer = "trt_2014", driver = "GeoJSON")
